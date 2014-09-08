@@ -1,0 +1,4 @@
+from .user_based_recommender import UserBasedRecommender
+from .item_based_recommender import ItemBasedRecommender
+from .slope_one_recommender import SlopeOneRecommender
+from .popularity_recommender import PopularityRecommender
