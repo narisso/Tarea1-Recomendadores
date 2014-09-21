@@ -41,8 +41,9 @@ class ItemBasedRecommender(BaseRecommender):
                         item_id2 = self._model.index_to_item_id(itemno)
                         s = self._similarity.get_similarity(item_id, item_id2)
 
-                        if s > 0:
-                            self.similarities[item_id][item_id2] = s
+                        if item_id2 not in self.similarities:
+                            if s > 0:
+                                self.similarities[item_id][item_id2] = s
 
             print "ITEM SIMILARITIES PROGRESS: %f %%" % (100.0)
 
@@ -51,16 +52,19 @@ class ItemBasedRecommender(BaseRecommender):
             output.close()
 
     def get_similarity(self, item1, item2):
-
-        try:
-
-            if self.similarities:    
-                return self.similarities[item1][item2]
         
-        except Exception, e:
-            print e
-            return 0
-
+        if self.similarities:
+            s = 0
+            try:
+                s = self.similarities[item1][item2]
+                
+            except:
+                try:
+                    s = self.similarities[item2][item1]
+                except:
+                    pass
+            return s
+            
         return self._similarity.get_similarity(item1, item2)
 
     def recomend(self, user_id, n):

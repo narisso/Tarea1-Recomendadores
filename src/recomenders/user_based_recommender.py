@@ -68,11 +68,11 @@ class UserBasedRecommender(BaseRecommender):
     def recomend(self, user_id, n):
         pass
 
-    def predict(self, user_id, item_id):
+    def predict(self, user_id, item_id, test_set=[] ):
 
         avg = self._model.get_user_id_avg(user_id)
 
-        neighbors = self.get_neighbors(user_id, item_id)
+        neighbors = self.get_neighbors(user_id, item_id, test_set)
         top_sum = 0
         bot_sum = 0
 
@@ -86,35 +86,55 @@ class UserBasedRecommender(BaseRecommender):
                     bot_sum = bot_sum + n[0]
 
             if bot_sum == 0:
-                return 0
+                return self._model.get_user_id_avg(user_id)
             else:
                 ret = avg + top_sum / bot_sum
 
                 if ret > 10.0:
                     return 10.0
-                if ret < 0.0:
-                    return 0.0
+                if ret < 1.0 and ret != 0.0:
+                    return 1.0
+                if ret == 0.0:
+                    return self._model.get_user_id_avg(user_id)
                 return ret
         except:
-            return 0
+            return self._model.get_user_id_avg(user_id)
 
 
-    def get_neighbors(self, user_id, item_id):
+    def get_neighbors(self, user_id, item_id, train_set):
         user_ids = self._model.user_ids()
         neighbors = []
         current_min_sim = -1.0
 
-        for idx, u in enumerate(user_ids):
-            sim = self.get_similarity(user_id, u , item_id)
-            if(len(neighbors) < self._k_facor and sim > 0 ):
-                heapq.heappush(neighbors, (sim, u))
-            elif(sim > current_min_sim and sim > 0):
-                min_item = heapq.heappop(neighbors)
-                current_min_sim = min_item[0]
-                heapq.heappush(neighbors, (sim, u))
-            
-            if(idx % 1000 == 0):
-                print "PROGRESS: %f %% (%i/%i - %s)" % ((float(idx) * 100.0 / float(user_ids.size)) , idx , user_ids.size, u)
+        if len(train_set) == 0:
 
-        print neighbors
+            for idx, u in enumerate(user_ids):
+                sim = self.get_similarity(user_id, u , item_id)
+                if(len(neighbors) < self._k_facor and sim > 0 ):
+                    heapq.heappush(neighbors, (sim, u))
+                elif(sim > current_min_sim and sim > 0):
+                    min_item = heapq.heappop(neighbors)
+                    current_min_sim = min_item[0]
+                    heapq.heappush(neighbors, (sim, u))
+                
+                if(idx % 1000 == 0):
+                    pass#print "PROGRESS: %f %% (%i/%i - %s)" % ((float(idx) * 100.0 / float(user_ids.size)) , idx , user_ids.size, u)
+                print "PROGRESS: %f %%" % 100.0 
+
+        else:
+
+            for idx in train_set:
+                u = self._model.index_to_user_id(idx)
+                sim = self.get_similarity(user_id, u , item_id)
+                
+                if(len(neighbors) < self._k_facor and sim > 0 ):
+                    heapq.heappush(neighbors, (sim, u))
+                elif(sim > current_min_sim and sim > 0):
+                    min_item = heapq.heappop(neighbors)
+                    current_min_sim = min_item[0]
+                    heapq.heappush(neighbors, (sim, u))
+                
+                if(idx % 1000 == 0):
+                    pass#print "PROGRESS: %f %% (%i/%i - %s)" % ((float(idx) * 100.0 / float(user_ids.size)) , idx , user_ids.size, u)
+
         return neighbors
