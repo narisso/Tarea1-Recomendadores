@@ -4,7 +4,6 @@ from scipy.sparse import *
 from scipy import *
 
 from data_models.rating_preference_matrix import RatingPreferenceMatrix
-from similarities.weighted_pearson_user_similarity import WeightedPearsonUserSimilarity
 from recomenders.popularity_recommender import PopularityRecommender
 
 def get_train_dataset():
@@ -18,6 +17,15 @@ def get_train_dataset():
 
         return data
 
+def get_train_dataset_traspose():
+    with open('../train/ratings.csv', 'rb') as csvfile:
+        data = {}
+        reader = csv.reader(csvfile,delimiter=';')
+        for row in reader:
+            if(row[1] not in data):
+                data[row[1]] = {}
+            data[row[1]][row[0]] = float(row[2])
+
 def get_predictions():
     with open('../prediction/prediction.csv', 'rb') as csvfile:
         data = {}
@@ -29,7 +37,7 @@ def get_predictions():
 
         return data
 
-def generate_predicitons(data, recommender):
+def generate_predictons(data, recommender):
     pred = {}
     for user in data.keys():
         pred[user] = {}
@@ -47,13 +55,13 @@ def generate_predicitons(data, recommender):
     
 
 def main():
-    data = get_train_dataset();
-    print "Loaded %d rows" % len(data)
-    
-    model = RatingPreferenceMatrix(data, is_dict=True)
+    data = get_train_dataset()
+    t_data = get_train_dataset_traspose()
+
+    model = RatingPreferenceMatrix(data,t_data)
     recommender = PopularityRecommender(model)
     prediction_set = get_predictions()
-    generate_predicitons(prediction_set, recommender)
+    generate_predictons(prediction_set, recommender)
 
 if __name__ == "__main__":
     main()

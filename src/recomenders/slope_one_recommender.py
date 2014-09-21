@@ -1,98 +1,114 @@
 from .base_recommender import BaseRecommender
 import numpy as np
-from scipy.sparse import *
-from scipy import *
+import cPickle as pickle
+import os
 
 class SlopeOneRecommender(BaseRecommender):
 
-    def __init__(self, model):
+    def __init__(self, model, min_ratings = 2):
+
+        print "LOADING SLOPE ONE RECOMMENDER"
+
         self._model = model
         self.user_deviations = {}
+        self.min_ratings = min_ratings # Parameter
+
+        self.build_deviations()
+
+        print "SLOPE ONE RECOMMENDER LOADED"
 
     def recomend(self, user_id, n):
         pass
 
     def predict(self, user_id, item_id):
-        item_set = self._model.keys_from_user(user_id)
-        item_set.append(item_id)
-
-        self.compute_deviations(user_id,item_set)
+        
+        item_set = self._model.preference_values_from_user(user_id).keys()
 
         sum = 0
         tot = 0
 
-        for i in range(0,len(item_set)):
-            if i == len(item_set) - 1:
-                pass
-            elif abs(self.user_deviations[user_id][len(item_set) - 1,i]) < 11:
-                tot = tot + 1
-                sum = sum + self.user_deviations[user_id][len(item_set) - 1,i] + self._model.preference_value(user_id, item_set[i])
-                print "%f + %f " %(self.user_deviations[user_id][len(item_set) - 1,i],self._model.preference_value(user_id, item_set[i]))
+        for itemno in item_set:
+            iid = self._model.index_to_item_id(itemno)
+            num_ratings = len(self._model.preference_values_for_item(iid))
 
-        print sum
-        print tot
+            if num_ratings >= self.min_ratings:
+                # weighted slope one
+                sum = sum + (self.deviations[item_id][iid][0] + self._model.preference_value(user_id, iid))*self.deviations[item_id][iid][1] 
+                tot = self.deviations[item_id][iid][1] 
+
         if tot == 0:
             return 0
-        return float( 1.0 / float(tot) ) * float(sum)
+        ret = float(sum) / float(tot)
 
-    def deviation(self,x,y):
-        item1 = self._model.index_to_item_id(x)
-        item2 = self._model.index_to_item_id(y)
+        if ret > 10.0:
+            return 10.0
+        if ret < 0.0:
+            return 0.0
+        return ret
 
-        vector1 = self._model.preference_values_for_item(item1).toarray()
-        vector2 = self._model.preference_values_for_item(item2).toarray()
 
-        vector1 = vector1 * (vector2>0)
-        vector2 = vector2 * (vector1>0)
+    def deviation(self,item1,item2):
+       
+        common, prefs1, prefs2 = self.get_common_users(item1, item2)
 
-        if np.count_nonzero(vector1) == 0:
-            return -100
+        if(len(common) == 0):
+            return np.nan, 0
 
-        return  float((vector1 - vector2).sum()) / float(np.count_nonzero(vector1))
+        return  float((prefs1 - prefs2).sum()) / float(len(common)), len(common)
+    
+    def get_common_users(self, item1, item2):
 
-    def item_id_deviation(self,item1,item2):
-        try:
-            vector1 = self._model.preference_values_for_item(item1).toarray()
-            vector2 = self._model.preference_values_for_item(item2).toarray()
-        except:
-            return -100
-            
-        vector1 = vector1 * (vector2>0)
-        vector2 = vector2 * (vector1>0)
+        if(item1 == item2):
+            return np.asarray([]), np.asarray([]), np.asarray([])
 
-        if np.count_nonzero(vector1) == 0:
-            return -100
+        prefs1 = self._model.preference_values_for_item(item1).keys()
+        prefs2 = self._model.preference_values_for_item(item2).keys()
 
-        return  (vector1 - vector2).sum() / np.count_nonzero(vector1)
+        # idx = np.intersect1d( np.where( prefs1[:] > 0)[0], np.where(prefs2[:] > 0)[0])
+        comon_prefs = np.intersect1d(prefs1, prefs2)
 
-    def compute_deviations(self,user_id, item_set):
-        n_items = len(item_set)
-        self.user_deviations[user_id] = np.zeros(shape=(n_items,n_items), dtype=np.int8)
-        #self.user_deviations[user_id][len(item_set) - 1,i]
-        for j in range(0,len(item_set)):
-            if j == len(item_set) - 1:
-                pass
-            else:
-                dev = self.item_id_deviation(item_set[len(item_set) - 1],item_set[j])
-                self.user_deviations[user_id][len(item_set) - 1,j] = dev
-                self.user_deviations[user_id][j, len(item_set) - 1] = -dev
-   
+        if( len(comon_prefs) > 0):
+            item1_idx = self._model.item_id_to_index(item1)
+            item2_idx = self._model.item_id_to_index(item2)
+            vector1 = [self._model.preference_value_from_index(i,item1_idx) for i in comon_prefs]
+            vector2 = [self._model.preference_value_from_index(i,item2_idx) for i in comon_prefs]
+
+            return np.asarray(comon_prefs), np.asarray(vector1), np.asarray(vector2)
+        else:
+            return np.asarray([]), np.asarray([]), np.asarray([])
+
+    def build_deviations(self):
+
+        if os.path.isfile('tmp/slope_one_deviations.pkl'):
+            pkl_file = open('tmp/slope_one_deviations.pkl', 'rb')
+            self.deviations = pickle.load(pkl_file)
+            pkl_file.close()
+            print "DEVIATIONS LOADED: %f %%" % (100.0)
+        else:
+            self.compute_all_deviations()
+            output = open('tmp/slope_one_deviations.pkl', 'wb')
+            pickle.dump(self.deviations, output)
+            output.close()
+
 
     def compute_all_deviations(self):
-        n_items = len(self._model.item_ids())
-        self.deviations = np.zeros(shape=(n_items,n_items), dtype=np.int8)
+        self.deviations = {}
 
-        print "COMPUTING DEV"
-        for i in range(0,n_items):
-            for j in range(i, n_items):
-                if i == j:
-                    pass
-                else:
-                    dev = self.deviation(i,j)
-                    self.deviations[i,j] = dev
-                    self.deviations[j,i] = -dev
-                    print "%i  %i / %i  - %f %%" % (dev, j + n_items*i , n_items*n_items, float(j + n_items*i)*100.0/float(n_items*n_items) )
-        output = open('tmp/item_dev_matrix.pkl', 'wb')
-        #self.sparse = coo_matrix(self.deviations)
-        pickle.dump(self.deviations, output)
-        output.close()
+        for n, item_id in enumerate(self._model.item_ids()):
+            self.deviations[item_id] = {}
+
+            print "DEVIATIONS PROGRESS: %f %%" % (float(n) * 100.0 / float(self._model.item_ids().size))
+
+            prefs = self._model.preference_values_for_item(item_id).keys()
+
+            for userno in prefs:
+                user_id = self._model.index_to_user_id(userno)
+                items = self._model.preference_values_from_user(user_id).keys()
+                for itemno in items:
+                    item_id2 = self._model.index_to_item_id(itemno)
+                    d, l = self.deviation(item_id, item_id2)
+
+                    if not np.isnan(d):
+                        self.deviations[item_id][item_id2] = (d,l)
+
+        print "DEVIATIONS PROGRESS: %f %%" % (100.0)

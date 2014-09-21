@@ -2,12 +2,15 @@ import csv
 
 from scipy.sparse import *
 from scipy import *
-import pickle
+
 from data_models.rating_preference_matrix import RatingPreferenceMatrix
+
 from recomenders.slope_one_recommender import SlopeOneRecommender
 from recomenders.popularity_recommender import PopularityRecommender
-import operator
-
+from similarities.weighted_pearson_user_similarity import WeightedPearsonUserSimilarity
+from recomenders.user_based_recommender import UserBasedRecommender
+from similarities.adj_cosine_item_similarity import AdjCosineItemSimilarity
+from recomenders.item_based_recommender import ItemBasedRecommender
 
 def get_train_dataset():
     with open('../train/ratings.csv', 'rb') as csvfile:
@@ -20,45 +23,33 @@ def get_train_dataset():
 
         return data
 
-def get_test_data(model):
+def get_train_dataset_traspose():
+    with open('../train/ratings.csv', 'rb') as csvfile:
+        data = {}
+        reader = csv.reader(csvfile,delimiter=';')
+        for row in reader:
+            if(row[1] not in data):
+                data[row[1]] = {}
+            data[row[1]][row[0]] = float(row[2])
 
-    test = {}
-    i = 0
-    for uid in model.dataset.keys():
-        i = i + 1
-        test[uid] = {}
-        test[uid] = model.dataset[uid]
-        if i == 50:
-            break
+        return data
 
-    return test
-
-def generate_predicitons(data, recommender, recommender2):
-    pred = {}
-    for user in data.keys():
-        pred[user] = {}
-        for item_id in data[user].keys():
-            print
-            print "Predicting " + item_id + " for " + user
-            print
-            pred[user][item_id] = recommender.predict(user,item_id)
-            if pred[user][item_id] < 1.0 and pred[user][item_id] > 0:
-                pred[user][item_id] = 1.0
-            elif pred[user][item_id] > 10.0:
-                pred[user][item_id] = 10.0
-            print "Finish %f" % (pred[user][item_id])
 
 def main():
-    data = get_train_dataset();
-    print "Loaded %d rows" % len(data)
+    data = get_train_dataset()
+    t_data = get_train_dataset_traspose()
     
-    model = RatingPreferenceMatrix(data, is_dict=True)
-    recommender = SlopeOneRecommender(model)
-    recommender2 = PopularityRecommender(model)
-    test_set = get_test_data()
+    model = RatingPreferenceMatrix(data, t_data)
 
-    get_test_data(test_set, recommender, recommender2)
+    slope_recommender = SlopeOneRecommender(model)
+    pop_recommender = PopularityRecommender(model)
 
+    item_sim    = AdjCosineItemSimilarity(model)
+    item_recommender = ItemBasedRecommender(model, item_sim)
+
+    user_sim = WeightedPearsonUserSimilarity(model)
+    user_recommender = UserBasedRecommender(model, user_sim)
+    
 
 if __name__ == "__main__":
     main()

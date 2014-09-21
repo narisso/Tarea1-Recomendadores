@@ -4,7 +4,7 @@ from scipy.sparse import *
 from scipy import *
 
 from data_models.rating_preference_matrix import RatingPreferenceMatrix
-from similarities.cosine_item_similarity import CosineItemSimilarity
+from similarities.adj_cosine_item_similarity import AdjCosineItemSimilarity
 from recomenders.item_based_recommender import ItemBasedRecommender
 
 def get_train_dataset():
@@ -40,7 +40,7 @@ def get_predictions():
 
         return data
 
-def generate_predicitons(data, recommender):
+def generate_predictons(data, recommender):
     pred = {}
     for user in data.keys():
         pred[user] = {}
@@ -60,13 +60,13 @@ def generate_predicitons(data, recommender):
 def main():
     data = get_train_dataset();
     t_data = get_train_dataset_traspose()
-    print "Loaded %d rows" % len(data)
     
-    model = RatingPreferenceMatrix(data,t_data, is_dict=True)
-    similarity = CosineItemSimilarity(model)
+    model = RatingPreferenceMatrix(data,t_data)
+    similarity = AdjCosineItemSimilarity(model)
     recommender = ItemBasedRecommender(model, similarity)
+
     prediction_set = get_predictions()
-    generate_predicitons(prediction_set, recommender)
+    generate_predictons(prediction_set, recommender)
 
 if __name__ == "__main__":
     main()
