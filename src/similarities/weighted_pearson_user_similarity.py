@@ -33,7 +33,6 @@ class WeightedPearsonUserSimilarity(BaseSimilarity):
         return sim
 
 
-
     def pearson_corr(self, x, y):
         # Assume len(x) == len(y)
         n = len(x)

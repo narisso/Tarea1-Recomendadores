@@ -49,26 +49,29 @@ class UserBasedRecommender(BaseRecommender):
             output = open('tmp/pearson_user_sim.pkl', 'wb')
             pickle.dump(self.similarities, output)
             output.close()
-    
-    def get_similarity(self, user1, user2, item_id):
 
-        try:
-            if self._model.preference_value(user2,item_id) == 0:
-                return 0
-
-            if self.similarities:    
-                return self.similarities[user1][user2]
+    def recommend(self, user_id, n= 10, test_set=[]):
+        # user_prefs = self._model.preference_values_from_user(user_id).keys()
+        reccomendations = []
+        current_min_sim = -1.0
         
-        except Exception, e:
-            print e
-            return 0
+        prefs = self._model.preference_values_from_user(user_id).keys()
+        for itemno in prefs:
+            iid = self._model.index_to_item_id(itemno)
+            score = self.predict(user_id,iid,test_set=test_set)
+            if(len(reccomendations) < n and score > 0.0 ):
+                heapq.heappush(reccomendations, (score, iid))
+            elif(score > current_min_sim and score > 0.0):
+                min_item = heapq.heappop(reccomendations)
+                current_min_sim = min_item[0]
+                heapq.heappush(reccomendations, (score, iid))
+        
+        rec_list = map(list, zip(*reccomendations))
 
-        return self._similarity.get_similarity(user1, user2)
+        return rec_list
 
-    def recomend(self, user_id, n):
-        pass
 
-    def predict(self, user_id, item_id, test_set=[] ):
+    def predict(self, user_id, item_id, test_set=[], default = None ):
 
         avg = self._model.get_user_id_avg(user_id)
 
@@ -76,8 +79,21 @@ class UserBasedRecommender(BaseRecommender):
         top_sum = 0
         bot_sum = 0
 
-        try:
+        if(default != None):
+            default = default
+        else:
+            try:
+                default1 = self._model.get_item_id_avg(item_id)
+            except:
+                default1 = 0.0
+            try:
+                default2 = self._model.get_user_id_avg(user_id)
+            except:
+                default2 = 0.0
 
+            default = ( default1 + default2 ) / 2.0
+
+        try:
             for n in neighbors:
                 n_avg = self._model.get_user_id_avg( n[1] )
                 p = self._model.preference_value(n[1],item_id)
@@ -86,7 +102,7 @@ class UserBasedRecommender(BaseRecommender):
                     bot_sum = bot_sum + n[0]
 
             if bot_sum == 0:
-                return self._model.get_user_id_avg(user_id)
+                return default
             else:
                 ret = avg + top_sum / bot_sum
 
@@ -95,46 +111,44 @@ class UserBasedRecommender(BaseRecommender):
                 if ret < 1.0 and ret != 0.0:
                     return 1.0
                 if ret == 0.0:
-                    return self._model.get_user_id_avg(user_id)
+                    return default
                 return ret
         except:
-            return self._model.get_user_id_avg(user_id)
+            return default
 
 
-    def get_neighbors(self, user_id, item_id, train_set):
-        user_ids = self._model.user_ids()
+    def get_neighbors(self, user_id, item_id, test_set):
         neighbors = []
         current_min_sim = -1.0
 
-        if len(train_set) == 0:
+        if len(test_set) == 0:
 
-            for idx, u in enumerate(user_ids):
-                sim = self.get_similarity(user_id, u , item_id)
+            for user, sim in self.similarities[user_id].items():
+
                 if(len(neighbors) < self._k_facor and sim > 0 ):
-                    heapq.heappush(neighbors, (sim, u))
+                    heapq.heappush(neighbors, (sim, user))
                 elif(sim > current_min_sim and sim > 0):
                     min_item = heapq.heappop(neighbors)
                     current_min_sim = min_item[0]
-                    heapq.heappush(neighbors, (sim, u))
+                    heapq.heappush(neighbors, (sim, user))
                 
-                if(idx % 1000 == 0):
-                    pass#print "PROGRESS: %f %% (%i/%i - %s)" % ((float(idx) * 100.0 / float(user_ids.size)) , idx , user_ids.size, u)
-                print "PROGRESS: %f %%" % 100.0 
-
         else:
 
-            for idx in train_set:
-                u = self._model.index_to_user_id(idx)
-                sim = self.get_similarity(user_id, u , item_id)
-                
-                if(len(neighbors) < self._k_facor and sim > 0 ):
-                    heapq.heappush(neighbors, (sim, u))
-                elif(sim > current_min_sim and sim > 0):
-                    min_item = heapq.heappop(neighbors)
-                    current_min_sim = min_item[0]
-                    heapq.heappush(neighbors, (sim, u))
-                
-                if(idx % 1000 == 0):
-                    pass#print "PROGRESS: %f %% (%i/%i - %s)" % ((float(idx) * 100.0 / float(user_ids.size)) , idx , user_ids.size, u)
+            for user, sim in self.similarities[user_id].items():
+                idx = self._model.user_id_to_index(user)
 
+                if(len(neighbors) < self._k_facor and sim > 0 ):
+                    if(test_set[idx] == 1):
+                        pass
+                    else:
+                        heapq.heappush(neighbors, (sim, user))
+                elif(sim > current_min_sim and sim > 0):
+                    if(test_set[idx] == 1):
+                        pass
+                    else:
+                        min_item = heapq.heappop(neighbors)
+                        current_min_sim = min_item[0]
+                        heapq.heappush(neighbors, (sim, user))
+                
+                
         return neighbors

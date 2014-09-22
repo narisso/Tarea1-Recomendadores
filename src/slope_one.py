@@ -45,7 +45,7 @@ def generate_predictons(data, recommender):
             print
             print "Predicting " + item_id + " for " + user
             print
-            pred[user][item_id] = recommender.predict(user,item_id)
+            pred[user][item_id] = recommender.predict(user,item_id,default=0.0)
             print "Finish %f" % (pred[user][item_id])
         
 
